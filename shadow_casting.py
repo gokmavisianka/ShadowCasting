@@ -183,6 +183,6 @@ class LightSource:
         return additional_points
 
     # Can be used to show the light source. Its color is red but can be changed.
-    def draw_circle(self, color=(255, 0, 0)):
+    def show(self, color=(255, 0, 0)):
         pygame.draw.circle(self.display, color, (self.x, self.y), self.radius)
     
