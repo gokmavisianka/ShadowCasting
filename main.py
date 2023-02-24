@@ -41,10 +41,13 @@ def draw_and_update():
         light_source.draw_shadow(corners)
         # corners = np.array([[x, y], [x + width, y], [x, y + height], [x + width, y + height]])
 
-    # Draw the rectangles
+    # Draw the rectangles.
     for rectangle in rectangles:
         rectangle.draw()
 
+    # Show the light source.
+    light_source.show()
+    
     # Update the game window.
     pygame.display.flip()
 
