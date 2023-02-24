@@ -23,13 +23,73 @@ SOFTWARE.
 """
 
 import pygame
-from time import sleep, perf_counter
-from threading import Thread
-from random import randint
 import numpy as np
 
 pygame.init()
 ON = True
+
+
+class Text:
+    def __init__(self, base_string: str, function, color: tuple[int, int, int] = (255, 0, 0)):
+        # base_string can be "FPS: " or "Coin: " to represent the remaining part.
+        self.base_string = base_string
+        self.color = color
+        # function is used to get the remaining part (It can be fps value or amount of coins etc.) of the string.
+        # So {base_string + remaining} will be shown on the screen.
+        self.function = function
+        # Size of the font can be changed.
+        self.font = pygame.font.SysFont("Helvetica", 32)
+
+    def show(self, display, position, string=None):
+        if string is None:
+            string = self.base_string
+            remaining = self.function()
+            # Check if the type of the remaining part is str. If not, Convert it to the str type before merging strings.
+            if type(remaining) is str:
+                string += remaining
+            else:
+                string += str(remaining)
+        text = self.font.render(string, True, self.color)
+        display.blit(text, position)
+
+
+class Screen:
+    def __init__(self, background_color: tuple[int, int, int], resolution: tuple[int, int] = (1000, 1000)):
+        self.background_color = background_color
+        self.width, self.height = resolution
+        self.display = pygame.display.set_mode(resolution)
+        self.FPS = self.FPS()
+
+    def fill(self, color=None):
+        if color is None:
+            color = self.background_color
+        # fill the screen with specific color.
+        self.display.fill(color)
+
+    @staticmethod
+    def update():
+        # Update the whole window.
+        pygame.display.flip()
+
+    class FPS:
+        def __init__(self):
+            self.clock = pygame.time.Clock()
+            self.text = Text(base_string="FPS: ", function=self.get)
+
+        def set(self, value):
+            self.clock.tick(value)
+
+        def get(self):
+            return int(self.clock.get_fps())
+
+
+class Rectangles:
+    def __init__(self):
+        self.elements = []
+
+    def draw_all(self):
+        for rectangle in self.elements:
+            rectangle.draw()
 
 
 class Rectangle:
@@ -44,7 +104,7 @@ class Rectangle:
         self.color = color
 
     def draw(self):
-        pygame.draw.rect(game.display, self.color, (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(screen.display, self.color, (self.x, self.y, self.width, self.height))
 
 
 class LightSource:
@@ -80,13 +140,18 @@ class LightSource:
                                7: {2: {0: 1, 1: 0, 2: (0, 1)}, 3: {0: 1, 1: 2, 2: (1, 2)}},
                                8: {1: {0: 1, 1: None, 2: (0, 1)}, 2: {0: None, 1: 0, 2: (0, 1)}}}
         self.additional_points = {(0, 1): (0, 0),
-                                  (1, 2): (game.width, 0),
-                                  (2, 3): (game.width, game.height),
-                                  (3, 4): (0, game.height)}  # (3, 4) can be considered as (3, 0).
+                                  (1, 2): (screen.width, 0),
+                                  (2, 3): (screen.width, screen.height),
+                                  (3, 4): (0, screen.height)}  # (3, 4) can be considered as (3, 0).
+
+    # Draw shadows for every rectangle in the list.
+    def draw_shadows(self):
+        for rectangle in rectangles.elements:
+            self.draw_shadow(rectangle)
 
     # Line starts from the position of the light source and ends at the corner of the rectangle.
     # The value of the "area" is important to know which corner will be used as the end point.
-    def operate(self, rectangle):
+    def draw_shadow(self, rectangle):
         area = self.where_am_i(rectangle)
         # Corners can be shown like this for a rectangle; |A   B|
         #                                                 |C   D|
@@ -111,7 +176,7 @@ class LightSource:
                 collision_points.append(collision_point)
             # Now, we can create polygons by using the collision points and the position of the corners.
             additional_points = self.find_additional_points(corner_indices, border_numbers)
-            self.draw_shadow(corner_points, collision_points, additional_points)
+            self.draw_polygon(corner_points, collision_points, additional_points)
 
     def where_am_i(self, rectangle):
         X = self.x < rectangle.corners[:, 0]
@@ -179,35 +244,36 @@ class LightSource:
                     point = (-(B / A), 0)
             elif border_index == 2:
                 if case == 1:  # y = B and x = window width
-                    point = (game.width, B)
+                    point = (screen.width, B)
                 elif case == 2:  # y = Ax + B where x = window width, so y = A * (window width) + B
-                    point = (game.width, A * game.width + B)
+                    point = (screen.width, A * screen.width + B)
             elif border_index == 3:
                 if case == 0:  # x = B and y = window height
-                    point = (B, game.height)
+                    point = (B, screen.height)
                 elif case == 2:  # y = Ax + B where y = window height, so x = (window height - B) / A
-                    point = ((game.height - B) / A, game.height)
+                    point = ((screen.height - B) / A, screen.height)
             points.append(point)
             border_number.append(border_index)
         if len(points) == 2:
             x1, y1 = points[0]
-            if (0 <= x1 <= game.width) and (0 <= y1 <= game.height):
+            if (0 <= x1 <= screen.width) and (0 <= y1 <= screen.height):
                 return points[0], border_number[0]
             else:
                 return points[1], border_number[1]
         else:
             return points[0], border_number[0]
 
-    def draw_shadow(self, corner_points, collision_points, additional_points):
+    # This function is used to draw shadows as polygons.
+    def draw_polygon(self, corner_points, collision_points, additional_points):
         points = [*corner_points[::-1], collision_points[0], *additional_points, collision_points[1]]
-        pygame.draw.polygon(game.display, self.shadow_color, points)
+        pygame.draw.polygon(screen.display, self.shadow_color, points)
 
     def find_additional_points(self, corner_indices, border_numbers):
         additional_points = []
         if (corner_indices == (1, 3)) and (border_numbers == [1, 3]):
-            additional_points = [(0, 0), (0, game.height)]
+            additional_points = [(0, 0), (0, screen.height)]
         elif (corner_indices == (0, 1)) and (border_numbers == [0, 2]):
-            additional_points = [(0, game.height), (game.width, game.height)]
+            additional_points = [(0, screen.height), (screen.width, screen.height)]
         else:
             start_value = min(border_numbers)
             difference = abs(border_numbers[0] - border_numbers[1])
@@ -219,48 +285,33 @@ class LightSource:
         return additional_points
 
     def draw_circle(self):
-        pygame.draw.circle(game.display, self.shadow_color, (self.x, self.y), self.radius)
+        pygame.draw.circle(screen.display, (255, 0, 0), (self.x, self.y), self.radius)
 
 
 class Game:
-    def __init__(self, size=(1000, 1000), background_color=(255, 255, 255)):
-        self.width, self.height = size
-        self.display = pygame.display.set_mode(size)
-        pygame.display.set_caption("Shadow Casting in Pygame")
-        self.background_color = background_color
-        self.rectangles = []
-        self.font = pygame.font.SysFont("Helvetica", 32)
-
-    def setup(self):
-        self.LightSource = LightSource(position=(500, 500))
+    @staticmethod
+    def setup():
         for p in range(60, 950, 100):
-            self.rectangles.append(Rectangle(position=(p, p), size=(80, 80)))
-        Thread(target=self.draw_and_update).start()
+            rectangles.elements.append(Rectangle(position=(p, p), size=(80, 80)))
 
-    def draw_and_update(self):
-        sleep(0.25)
-        while ON:
-            initial_time = perf_counter()
-            self.display.fill(self.background_color)
-            for rectangle in self.rectangles:
-                self.LightSource.operate(rectangle)
-            for rectangle in self.rectangles:
-                rectangle.draw()
-            self.LightSource.draw_circle()
-            final_time = perf_counter()
-            difference = round(final_time - initial_time, 4)
-            FPS = round(1 / difference)
-            self.text = self.font.render(f"FPS: {FPS}", True, (255, 0, 0))
-            self.display.blit(self.text, (0, 0))
-            pygame.display.flip()
+    @staticmethod
+    def draw_and_update():
+        screen.fill()
+        light_source.draw_shadows()
+        rectangles.draw_all()
+        light_source.draw_circle()
+        screen.FPS.text.show(screen.display, position=(0, 0))
+        screen.update()
 
 
 game = Game()
+rectangles = Rectangles()
+screen = Screen(background_color=(255, 255, 255), resolution=(1000, 1000))
+light_source = LightSource(position=(500, 500))
 game.setup()
 
-while True:
-    sleep(0.01)
-    game.LightSource.x, game.LightSource.y = pygame.mouse.get_pos()
+while ON:
+    light_source.x, light_source.y = pygame.mouse.get_pos()
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
@@ -270,3 +321,6 @@ while True:
         ON = False
         pygame.quit()
         quit()
+    screen.FPS.set(60)
+    game.draw_and_update()
+    
